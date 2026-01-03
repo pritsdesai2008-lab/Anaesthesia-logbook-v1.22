@@ -16,5 +16,10 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "description": "Offline anaesthesia logbook for case records, receipts, and summary management.",
+  "id": "anaeslog.app",
+  "scope": "./",
+  "lang": "en",
+  "orientation": "any"
 }
