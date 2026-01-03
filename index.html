@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AnaesLog – FINAL GOLD</title>
+
+<link rel="manifest" href="manifest.json">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+body{font-family:Arial;margin:0;background:#f5f7fb}
+header{background:#0b63f6;color:#fff;padding:14px;text-align:center}
+nav{display:flex;gap:6px;justify-content:center;padding:10px;background:#fff}
+nav button{padding:8px 14px;border:none;border-radius:6px;background:#e9ecef}
+nav button.active{background:#0b63f6;color:#fff}
+section{display:none;padding:14px}
+section.active{display:block}
+.card{background:#fff;padding:14px;border-radius:8px;margin-bottom:12px}
+input,select,textarea,button{width:100%;padding:8px;margin:6px 0}
+table{width:100%;border-collapse:collapse}
+th,td{border:1px solid #ccc;padding:6px}
+th{background:#0b63f6;color:#fff}
+.action a{margin-right:10px;cursor:pointer;font-size:18px}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h2>AnaesLog</h2>
+  <small>FINAL GOLD</small>
+</header>
+
+<nav>
+  <button onclick="show('doc',this)">Anaesthetist</button>
+  <button onclick="show('hospital',this)">Hospital</button>
+  <button onclick="show('new',this)" class="active">New Case</button>
+  <button onclick="show('cases',this)">Cases</button>
+  <button onclick="show('summary',this)">Summary</button>
+</nav>
+
+<section id="doc" class="card">
+  <h3>Anaesthetist</h3>
+  <input id="docName" placeholder="Name">
+  <input id="docReg" placeholder="Registration No">
+  <button onclick="saveDoc()">Save</button>
+</section>
+
+<section id="hospital" class="card">
+  <h3>Hospital</h3>
+  <input id="hName" placeholder="Hospital Name">
+  <textarea id="hAddr" placeholder="Hospital Address"></textarea>
+  <button onclick="saveHospital()">Save</button>
+</section>
+
+<section id="new" class="card active">
+  <h3>New Case</h3>
+
+  <input type="date" id="date">
+  <input id="patient" placeholder="Patient Name">
+  <input id="age" placeholder="Age">
+
+  <select id="sex">
+    <option value="">Sex</option>
+    <option>Male</option>
+    <option>Female</option>
+    <option>Other</option>
+  </select>
+
+  <textarea id="pAddr" placeholder="Patient Address"></textarea>
+  <input id="mobile" placeholder="Mobile Number">
+
+  <!-- AUTO-LEARNING INPUTS -->
+  <input id="surgery" list="surgeryList" placeholder="Surgery">
+  <datalist id="surgeryList"></datalist>
+
+  <input id="surgeon" list="surgeonList" placeholder="Surgeon">
+  <datalist id="surgeonList"></datalist>
+
+  <input id="anaes" list="anaesList" placeholder="Anaesthesia">
+  <datalist id="anaesList"></datalist>
+
+  <input id="amount" placeholder="Amount (Rs.)">
+
+  <button onclick="saveCase()">Save Case</button>
+</section>
+
+<section id="cases" class="card">
+  <h3>Cases</h3>
+  <table>
+    <thead>
+      <tr><th>Date</th><th>Patient</th><th>Rs.</th><th>Action</th></tr>
+    </thead>
+    <tbody id="caseList"></tbody>
+  </table>
+</section>
+
+<section id="summary" class="card">
+  <h3>Summary</h3>
+
+  <select id="filterType">
+    <option value="all">All</option>
+    <option value="daily">Daily</option>
+    <option value="monthly">Monthly</option>
+    <option value="yearly">Yearly</option>
+  </select>
+  <button onclick="renderSummary()">Apply Filter</button>
+  <button onclick="printSummary()">Print Summary PDF</button>
+
+  <table id="summaryTable">
+    <thead>
+      <tr>
+        <th>Date</th><th>Patient</th><th>Age</th><th>Sex</th>
+        <th>Surgery</th><th>Surgeon</th><th>Anaesthesia</th><th>Rs.</th>
+      </tr>
+    </thead>
+    <tbody id="summaryBody"></tbody>
+  </table>
+</section>
+
+<script>
+const { jsPDF } = window.jspdf;
+let cases = JSON.parse(localStorage.getItem("cases")||"[]");
+let receiptNo = Number(localStorage.getItem("receiptNo")||1);
+
+/* NAV */
+function show(id,btn){
+  document.querySelectorAll("section").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+  if(btn) btn.classList.add("active");
+  if(id==="cases") renderCases();
+  if(id==="summary") renderSummary();
+}
+
+/* PROFILES */
+function saveDoc(){
+  localStorage.setItem("doc",JSON.stringify({name:docName.value,reg:docReg.value}));
+  alert("Anaesthetist saved");
+}
+function saveHospital(){
+  localStorage.setItem("hospital",JSON.stringify({name:hName.value,addr:hAddr.value}));
+  alert("Hospital saved");
+}
+
+/* AUTO-LEARNING */
+function updateAutoLearn(){
+  const s1=new Set(), s2=new Set(), s3=new Set();
+  cases.forEach(c=>{
+    if(c.surgery) s1.add(c.surgery);
+    if(c.surgeon) s2.add(c.surgeon);
+    if(c.anaes) s3.add(c.anaes);
+  });
+  surgeryList.innerHTML=[...s1].map(v=>`<option value="${v}">`).join("");
+  surgeonList.innerHTML=[...s2].map(v=>`<option value="${v}">`).join("");
+  anaesList.innerHTML=[...s3].map(v=>`<option value="${v}">`).join("");
+}
+
+/* CASE SAVE */
+function saveCase(){
+  cases.push({
+    date:date.value,
+    patient:patient.value,
+    age:age.value,
+    sex:sex.value,
+    pAddr:pAddr.value,
+    mobile:mobile.value,
+    surgery:surgery.value,
+    surgeon:surgeon.value,
+    anaes:anaes.value,
+    amount:Number(amount.value),
+    receipt:receiptNo++
+  });
+  localStorage.setItem("cases",JSON.stringify(cases));
+  localStorage.setItem("receiptNo",receiptNo);
+  updateAutoLearn();
+  alert("Case saved");
+}
+
+/* CASE LIST */
+function renderCases(){
+  caseList.innerHTML="";
+  cases.forEach((c,i)=>{
+    caseList.innerHTML+=`
+    <tr>
+      <td>${c.date}</td>
+      <td>${c.patient}</td>
+      <td>${c.amount}</td>
+      <td class="action">
+        <a title="Print" onclick="printReceipt(${i})">🖨️</a>
+        <a title="Edit" onclick="editCase(${i})">✏️</a>
+        <a title="Delete" onclick="deleteCase(${i})">🗑️</a>
+      </td>
+    </tr>`;
+  });
+}
+
+function editCase(i){
+  const c=cases[i];
+  date.value=c.date;
+  patient.value=c.patient;
+  age.value=c.age||"";
+  sex.value=c.sex||"";
+  pAddr.value=c.pAddr||"";
+  mobile.value=c.mobile||"";
+  surgery.value=c.surgery||"";
+  surgeon.value=c.surgeon||"";
+  anaes.value=c.anaes||"";
+  amount.value=c.amount||"";
+  cases.splice(i,1);
+  localStorage.setItem("cases",JSON.stringify(cases));
+  updateAutoLearn();
+  show("new");
+}
+
+function deleteCase(i){
+  if(confirm("Delete this case?")){
+    cases.splice(i,1);
+    localStorage.setItem("cases",JSON.stringify(cases));
+    updateAutoLearn();
+    renderCases();
+  }
+}
+
+/* AMOUNT TO WORDS */
+function numberToWords(n){
+  const a=["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"];
+  const b=["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
+  if(n<20) return a[n];
+  if(n<100) return b[Math.floor(n/10)]+" "+a[n%10];
+  if(n<1000) return a[Math.floor(n/100)]+" Hundred "+numberToWords(n%100);
+  if(n<100000) return numberToWords(Math.floor(n/1000))+" Thousand "+numberToWords(n%1000);
+  return n;
+}
+
+/* RECEIPT */
+function printReceipt(i){
+  const c=cases[i];
+  const d=JSON.parse(localStorage.getItem("doc")||"{}");
+  const h=JSON.parse(localStorage.getItem("hospital")||"{}");
+  const doc=new jsPDF({format:"a5"});
+  let y=12;
+
+  doc.text(h.name||"",70,y,{align:"center"}); y+=6;
+  doc.setFontSize(9);
+  doc.text(h.addr||"",70,y,{align:"center"}); y+=8;
+
+  doc.text(`Receipt No: ${c.receipt||""}`,10,y); y+=5;
+  doc.text(`Date: ${c.date}`,10,y); y+=5;
+  doc.text(`Patient: ${c.patient}`,10,y); y+=5;
+  doc.text(`Age / Sex: ${c.age||""} / ${c.sex||""}`,10,y); y+=5;
+  doc.text(`Address: ${c.pAddr||""}`,10,y); y+=5;
+  doc.text(`Mobile: ${c.mobile||""}`,10,y); y+=5;
+  doc.text(`Procedure: ${c.surgery}`,10,y); y+=5;
+  doc.text(`Anaesthesia: ${c.anaes||""}`,10,y); y+=5;
+  doc.text(`Amount: Rs. ${c.amount}`,10,y); y+=6;
+  doc.text(`Amount in words: ${numberToWords(c.amount)} Only`,10,y); y+=6;
+  doc.text("Received with thanks.",10,y);
+
+  doc.text(`Anaesthetist: ${d.name||""} (${d.reg||""})`,10,100);
+  doc.save(`Receipt_${c.receipt}.pdf`);
+}
+
+/* SUMMARY */
+function renderSummary(){
+  summaryBody.innerHTML="";
+  let total=0;
+  cases.forEach(c=>{
+    total+=c.amount;
+    summaryBody.innerHTML+=`
+    <tr>
+      <td>${c.date}</td><td>${c.patient}</td><td>${c.age||""}</td><td>${c.sex||""}</td>
+      <td>${c.surgery}</td><td>${c.surgeon}</td><td>${c.anaes||""}</td><td>${c.amount}</td>
+    </tr>`;
+  });
+  summaryBody.innerHTML+=`
+  <tr><td colspan="7"><b>Total</b></td><td><b>${total}</b></td></tr>`;
+}
+
+function printSummary(){
+  const d=JSON.parse(localStorage.getItem("doc")||"{}");
+  const h=JSON.parse(localStorage.getItem("hospital")||"{}");
+  const doc=new jsPDF({orientation:"landscape"});
+  doc.text(h.name||"",140,10,{align:"center"});
+  doc.autoTable({html:"#summaryTable",startY:20});
+  doc.text(`Anaesthetist: ${d.name||""} (${d.reg||""})`,10,190);
+  doc.save("Summary.pdf");
+}
+
+/* INIT */
+updateAutoLearn();
+
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("sw.js");
+}
+</script>
+
+</body>
+</html>
